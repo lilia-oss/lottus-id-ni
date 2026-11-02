@@ -42,7 +42,7 @@ const PRIVACY_BY_BRAND = Object.freeze({
 let avisoAbierto = false;
 const privacyForStudent = () => PRIVACY_BY_BRAND[String(student?.marca || '').trim().toUpperCase()] || null;
 
-let stage=0, token='', student=null, imageBlob=null;
+let stage=0, token='', student=null, imageBlob=null, qualityPassed=false, qualityReport=null;
 const app=document.getElementById('app'), status=document.getElementById('status');
 const esc=t=>String(t??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const showStatus=(m,bad=true)=>{status.textContent=m;status.style.color=bad?'#a12a28':'#1d7b52'};
@@ -51,7 +51,7 @@ async function request(action,more={}){if(CONFIG.functionUrl.includes('TU-PROYEC
 function draw(){const names=['Valida tus datos','Confirma tu información','Toma tu fotografía','Registro recibido'];document.getElementById('stepnumber').textContent=stage+1;document.getElementById('stepname').textContent=names[stage];document.getElementById('progress').textContent=`Paso ${stage+1} de 4`;document.getElementById('bar').style.width=((stage+1)*25)+'%';showStatus('');
 if(stage===0){app.innerHTML='<h1>Valida tus datos</h1><p>Este enlace es personal. Confirma tu identidad para continuar con tu registro fotográfico.</p><label for="token">Enlace de invitación</label><input id="token" autocomplete="off" spellcheck="false" placeholder="Código de invitación"><button id="consultar">Verificar mis datos <span aria-hidden="true">→</span></button><div class="hint">Si recibiste el enlace por WhatsApp o correo, tu código se completará automáticamente.</div>';document.getElementById('consultar').onclick=loadStudent;const t=new URLSearchParams(location.search).get('token');if(t&&/^[a-f0-9]{64}$/i.test(t)){document.getElementById('token').value=t;history.replaceState({},'',location.pathname);};return;}
 if(stage===1){app.innerHTML=`<h1>Confirma tu información</h1><p>Estos datos se obtienen de tu expediente y no pueden editarse.</p>${[['Nombre',student.nombre],['Matrícula',student.matricula],['Marca',student.marca],['Plantel',student.plantel],['Periodo',student.periodo]].map(([k,v])=>`<div class="row"><span>${esc(k)}</span><span>${esc(v)}</span></div>`).join('')}<div class="hint">Si algún dato es incorrecto, no continúes y comunícate con tu plantel.</div><button id="correcto">Mis datos son correctos →</button>`;document.getElementById('correcto').onclick=()=>{stage=2;draw()};return;}
-if(stage===2){app.innerHTML=`<h1>Toma tu fotografía</h1><div class="rule">✓ Rostro completo y mirando de frente</div><div class="rule">✓ Fondo claro y buena iluminación</div><div class="rule">✓ Sin lentes oscuros, gorra ni filtros</div><div class="rule">✓ Una sola persona en la imagen</div><label for="capture" class="capture-label">📷 Tomar fotografía (cámara)</label><input id="capture" class="capture-input" type="file" accept="image/jpeg,image/png" capture="user"><label for="chooseFile" class="capture-label" style="margin-top:10px;background:#f1f5f8">🖼 Elegir fotografía del dispositivo</label><input id="chooseFile" class="capture-input" type="file" accept="image/jpeg,image/png"><div id="preview"></div><div class="hint warn">Puedes tomar la fotografía desde un celular o usar una cámara conectada a tu computadora. La validación facial avanzada se incorporará antes de producción.</div><div class="hint" id="privacybox"><b>Aviso de privacidad de ${esc(student.marca)}</b><br><a id="privacy" target="_blank" rel="noopener noreferrer" href="${esc(privacyForStudent()?.url || '#')}">Abrir aviso de privacidad ↗</a><div style="font-size:12px;margin-top:6px">Consulta el aviso antes de aceptar. Se abrirá en una nueva pestaña.</div></div><label class="consent"><input type="checkbox" id="consent" disabled><span>He consultado el aviso de privacidad de ${esc(student.marca)} y otorgo expresamente mi consentimiento para el tratamiento de mi fotografía con fines de registro y control de acceso biométrico.</span></label><button id="send" disabled>Enviar fotografía →</button>`;
+if(stage===2){app.innerHTML=`<h1>Toma tu fotografía</h1><div class="rule">✓ Rostro completo y mirando de frente</div><div class="rule">✓ Fondo claro y buena iluminación</div><div class="rule">✓ Sin lentes oscuros, gorra ni filtros</div><div class="rule">✓ Una sola persona en la imagen</div><label for="capture" class="capture-label">📷 Tomar fotografía (cámara)</label><input id="capture" class="capture-input" type="file" accept="image/jpeg,image/png" capture="user"><label for="chooseFile" class="capture-label" style="margin-top:10px;background:#f1f5f8">🖼 Elegir fotografía del dispositivo</label><input id="chooseFile" class="capture-input" type="file" accept="image/jpeg,image/png"><div id="preview"></div><div id="qualityResults" role="status" aria-live="polite"></div><div class="hint warn">Puedes tomar la fotografía desde un celular o usar una cámara conectada a tu computadora. La calidad de la imagen se revisa antes de enviarla. La aprobación biométrica definitiva se realiza en HikCentral.</div><div class="hint" id="privacybox"><b>Aviso de privacidad de ${esc(student.marca)}</b><br><a id="privacy" target="_blank" rel="noopener noreferrer" href="${esc(privacyForStudent()?.url || '#')}">Abrir aviso de privacidad ↗</a><div style="font-size:12px;margin-top:6px">Consulta el aviso antes de aceptar. Se abrirá en una nueva pestaña.</div></div><label class="consent"><input type="checkbox" id="consent" disabled><span>He consultado el aviso de privacidad de ${esc(student.marca)} y otorgo expresamente mi consentimiento para el tratamiento de mi fotografía con fines de registro y control de acceso biométrico.</span></label><button id="send" disabled>Enviar fotografía →</button>`;
 document.getElementById('capture').onchange=selectImage;document.getElementById('chooseFile').onchange=selectImage;document.getElementById('consent').onchange=updateSend;
 const privacyLink=document.getElementById('privacy');
 if(!privacyForStudent()){privacyLink.removeAttribute('href');privacyLink.textContent='Aviso no configurado para esta marca';}
@@ -60,9 +60,86 @@ document.getElementById('send').onclick=upload;return;}
 app.innerHTML='<div style="text-align:center;font-size:44px">✅</div><h1>¡Fotografía recibida!</h1><p>Recibimos tu fotografía correctamente. La revisaremos antes de sincronizarla con los sistemas de acceso al plantel.</p><div class="hint ok"><b>Estado:</b> Fotografía recibida · Pendiente de validación</div><p class="muted">No significa todavía que el acceso biométrico esté habilitado.</p>';
 }
 async function loadStudent(){token=document.getElementById('token').value.trim().toLowerCase();if(!/^[a-f0-9]{64}$/.test(token)){showStatus('Tu enlace no es válido. Solicita uno nuevo a tu plantel.');return;}busy(true);try{const data=await request('lookup');student=data.alumno;avisoAbierto=false;setBrand(student.marca);if(data.estado!=='sin_foto'&& !['pendiente','rechazada'].includes(data.estado)){showStatus('Ya existe una fotografía recibida. Contacta a tu plantel si necesitas cambiarla.');return;}stage=1;draw()}catch(e){showStatus(e.message)}finally{busy(false)}}
-function updateSend(){document.getElementById('send').disabled=!(imageBlob&&avisoAbierto&&privacyForStudent()&&document.getElementById('consent').checked)}
-async function selectImage(e){imageBlob=null;updateSend();const file=e.target.files?.[0];if(!file)return;if(!['image/jpeg','image/png'].includes(file.type)||file.size>10*1024*1024){showStatus('Solo JPG o PNG con un máximo de 10 MB.');return;}const url=URL.createObjectURL(file);try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url;});if(img.naturalWidth<600||img.naturalHeight<800){showStatus('La imagen debe medir al menos 600 × 800 píxeles.');return;}const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;canvas.getContext('2d').drawImage(img,0,0);imageBlob=await new Promise(res=>canvas.toBlob(res,'image/jpeg',0.88));if(!imageBlob||imageBlob.size>10*1024*1024){imageBlob=null;showStatus('No se pudo preparar la fotografía.');return;}document.getElementById('preview').innerHTML='<p class="muted">Vista previa: revisa que tu rostro se vea con claridad.</p><img id="photo" alt="Vista previa de fotografía">';document.getElementById('photo').src=URL.createObjectURL(imageBlob);updateSend();}catch{showStatus('No se pudo abrir la fotografía.')}finally{URL.revokeObjectURL(url)}}
-async function upload(){const notice=privacyForStudent();if(!notice){showStatus('No hay un aviso de privacidad configurado para tu marca.');return;}if(!imageBlob||!avisoAbierto||!document.getElementById('consent').checked)return;busy(true);showStatus('Enviando fotografía...',false);try{const base64=await new Promise((res,rej)=>{const f=new FileReader();f.onload=()=>res(String(f.result).split(',')[1]);f.onerror=rej;f.readAsDataURL(imageBlob)});await request('upload',{image_base64:base64,mime:'image/jpeg',consentimiento:true,consentimiento_version:notice.version,consentimiento_marca:String(student.marca).toUpperCase()});stage=3;draw()}catch(e){showStatus(e.message)}finally{busy(false);if(stage===2)updateSend()}}
+function updateSend(){document.getElementById('send').disabled=!(imageBlob&&qualityPassed&&avisoAbierto&&privacyForStudent()&&document.getElementById('consent').checked)}
+// Comprobaciones locales: no sustituyen la verificación biométrica HikCentral.
+async function checkPhotoQuality(img){
+  const issues=[], notes=[];
+  const w=img.naturalWidth,h=img.naturalHeight;
+  if(w<600||h<800)issues.push('La fotografía debe medir al menos 600 × 800 píxeles.');
+  const c=document.createElement('canvas');
+  const scale=Math.min(1,480/Math.max(w,h)); c.width=Math.max(1,Math.round(w*scale)); c.height=Math.max(1,Math.round(h*scale));
+  const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(img,0,0,c.width,c.height);
+  const {data}=ctx.getImageData(0,0,c.width,c.height);
+  let sum=0,sum2=0,under=0,over=0,n=0,edgeSum=0,edgeSum2=0,edgeN=0;
+  const g=new Float32Array(c.width*c.height);
+  for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++){
+    const idx=y*c.width+x,i=idx*4;
+    const v=0.2126*data[i]+0.7152*data[i+1]+0.0722*data[i+2];g[idx]=v;
+    sum+=v;sum2+=v*v;n++;if(v<35)under++;if(v>245)over++;
+  }
+  const brightness=sum/n, contrast=Math.sqrt(Math.max(0,sum2/n-brightness*brightness));
+  if(brightness<65)issues.push('La foto está muy oscura. Colócate frente a una fuente de luz.');
+  if(brightness>210||over/n>.40)issues.push('La foto está sobreexpuesta. Evita la luz directa en el rostro.');
+  if(contrast<22)issues.push('Hay poco contraste. Busca iluminación uniforme y evita el contraluz.');
+  for(let y=1;y<c.height-1;y++)for(let x=1;x<c.width-1;x++){
+    const i=y*c.width+x;
+    const lap=4*g[i]-g[i-1]-g[i+1]-g[i-c.width]-g[i+c.width];
+    edgeSum+=lap;edgeSum2+=lap*lap;edgeN++;
+  }
+  const sharpness=edgeSum2/edgeN-(edgeSum/edgeN)**2;
+  if(sharpness<90)issues.push('La imagen parece borrosa. Limpia la cámara, enfoca el rostro e inténtalo otra vez.');
+  // FaceDetector es una API opcional. Si no está disponible NO certificamos frontalidad ni accesorios.
+  let faceStatus='pendiente_hikcentral';
+  if('FaceDetector' in window){
+    try{
+      const detector=new FaceDetector({fastMode:false,maxDetectedFaces:3});
+      const faces=await detector.detect(img);
+      if(faces.length===0)issues.push('No se detectó un rostro. Mira de frente a la cámara.');
+      if(faces.length>1)issues.push('Se detectó más de una persona. Debes salir solamente tú.');
+      if(faces.length===1){
+        const f=faces[0].boundingBox, cx=(f.x+f.width/2)/w,cy=(f.y+f.height/2)/h;
+        if(Math.abs(cx-.5)>.19||cy<.18||cy>.68)issues.push('Centra el rostro en el encuadre.');
+        if(f.width/w<.17||f.height/h<.20)issues.push('Acércate un poco a la cámara para que se vea bien el rostro.');
+        if(f.width/w>.78||f.height/h>.80)issues.push('Aléjate un poco: deja espacio alrededor del rostro.');
+        faceStatus='detectado_sin_certificar_frontalidad';
+      }
+    }catch(_){notes.push('No fue posible analizar la posición del rostro en este navegador.');}
+  }else{
+    notes.push('Este navegador no admite detección facial local. La orientación del rostro, lentes y gorra quedan pendientes de FaceCheck.');
+  }
+  notes.push('El portal no puede garantizar ausencia de lentes oscuros, gorra o filtros; HikCentral debe comprobar la aptitud biométrica.');
+  return {ok:issues.length===0,issues,notes,faceStatus,brightness:Math.round(brightness),sharpness:Math.round(sharpness)};
+}
+function displayQuality(report){
+  const root=document.getElementById('qualityResults');if(!root)return;
+  root.style.cssText='margin:14px 0;padding:14px;border-radius:10px;border:1px solid '+(report.ok?'#b7dac7':'#e4b4b2')+';background:'+(report.ok?'#f0faf4':'#fff5f3')+';color:#183447';
+  const heading=report.ok?'✓ Calidad preliminar aceptable':'Hay detalles por corregir';
+  const lines=report.ok?['Resolución, exposición y nitidez: revisión preliminar superada.','Aún pendiente: aceptación biométrica mediante HikCentral FaceCheck.']:report.issues;
+  root.innerHTML='<strong>'+heading+'</strong><ul style="margin:8px 0;padding-left:18px">'+lines.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul><small>'+esc(report.notes[0]||'')+'</small>';
+}
+async function selectImage(e){
+  imageBlob=null;qualityPassed=false;qualityReport=null;updateSend();
+  const file=e.target.files?.[0];if(!file)return;
+  if(!['image/jpeg','image/png'].includes(file.type)||file.size>10*1024*1024){showStatus('Solo JPG o PNG con un máximo de 10 MB.');return;}
+  const url=URL.createObjectURL(file);
+  try{
+    showStatus('Analizando iluminación, nitidez y encuadre...',false);
+    const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url;});
+    qualityReport=await checkPhotoQuality(img);displayQuality(qualityReport);
+    if(!qualityReport.ok){showStatus('Corrige los detalles indicados y toma nuevamente la fotografía.');return;}
+    const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;
+    canvas.getContext('2d').drawImage(img,0,0);
+    imageBlob=await new Promise(res=>canvas.toBlob(res,'image/jpeg',0.88));
+    if(!imageBlob||imageBlob.size>10*1024*1024){imageBlob=null;showStatus('No se pudo preparar la fotografía.');return;}
+    qualityPassed=true;
+    document.getElementById('preview').innerHTML='<p class="muted">Vista previa de tu fotografía</p><img id="photo" alt="Vista previa de fotografía">';
+    document.getElementById('photo').src=URL.createObjectURL(imageBlob);
+    showStatus('Revisión preliminar superada. La imagen quedará pendiente de validación HikCentral.',false);
+    updateSend();
+  }catch{showStatus('No se pudo analizar la fotografía. Intenta con otra imagen.');}
+  finally{URL.revokeObjectURL(url)}
+}
+async function upload(){const notice=privacyForStudent();if(!notice){showStatus('No hay un aviso de privacidad configurado para tu marca.');return;}if(!imageBlob||!qualityPassed||!avisoAbierto||!document.getElementById('consent').checked)return;busy(true);showStatus('Enviando fotografía...',false);try{const base64=await new Promise((res,rej)=>{const f=new FileReader();f.onload=()=>res(String(f.result).split(',')[1]);f.onerror=rej;f.readAsDataURL(imageBlob)});await request('upload',{image_base64:base64,mime:'image/jpeg',consentimiento:true,consentimiento_version:notice.version,consentimiento_marca:String(student.marca).toUpperCase()});stage=3;draw()}catch(e){showStatus(e.message)}finally{busy(false);if(stage===2)updateSend()}}
 draw();
 
 function setBrand(brand){const b=String(brand||'').toUpperCase();if(['UTC','ULA','UANE'].includes(b)){document.body.dataset.brand=b.toLowerCase();document.querySelectorAll('[data-brand-label]').forEach(el=>{el.textContent=b});}}
