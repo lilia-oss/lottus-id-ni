@@ -151,8 +151,8 @@ if(stage===1){app.innerHTML=`<h1>Confirma tu información</h1><p>Estos datos se 
 if(stage===2){app.innerHTML=`<h1>Toma tu fotografía</h1><p class="lead-sm">Así la reconocerá el lector facial de tu plantel.</p>
 <ul class="photo-tips"><li>${ic('check')}Rostro de frente y completo</li><li>${ic('check')}Buena luz, fondo claro</li><li>${ic('check')}Sin lentes oscuros ni gorra</li><li>${ic('check')}Solo tú en la imagen</li></ul>
 <div id="sourcePicker" class="source-picker">
-  <button type="button" class="source-card" id="openWebcam">${ic('camera')}<span><b>Tomar foto</b><small>Con la cámara de tu celular o computadora</small></span></button>
-  <button type="button" class="source-card" id="openFile">${ic('upload')}<span><b>Subir foto</b><small>Una imagen JPG o PNG que ya tengas</small></span></button>
+  <button type="button" class="source-card" id="openWebcam">${ic('camera')}<span><b>Abrir cámara</b><small>Del celular o de la computadora</small></span></button>
+  <button type="button" class="source-card" id="openFile">${ic('upload')}<span><b>Elegir fotografía</b><small>Desde tu dispositivo (JPG o PNG)</small></span></button>
 </div>
 <input id="capture" class="capture-input" type="file" accept="image/*" capture="user" tabindex="-1" aria-hidden="true"><input id="chooseFile" class="capture-input" type="file" accept="image/jpeg,image/png,image/webp,image/*" tabindex="-1" aria-hidden="true">
 <div id="cameraContainer" hidden></div><div id="cropContainer" hidden></div><div id="preview" hidden></div><div id="qualityResults" role="status" aria-live="polite"></div>
