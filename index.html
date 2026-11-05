@@ -47,6 +47,24 @@ body[data-brand=ula]{--brand:#8029ed}body[data-brand=utc]{--brand:#007c9b}body[d
 #app button.secondary-btn{background:#e9f0f3;color:#214659}
 #app button.secondary-btn:hover:not(:disabled){background:#dde7ec}
 #app [hidden]{display:none!important}
+.report-cta{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:22px;padding:14px 16px;border:1px solid #dbe4ea;border-radius:10px;background:#f7fafb;text-align:left}
+.report-cta b{display:block;font-size:14px;color:#173a53}.report-cta span{font-size:12.5px;color:#5f7282}
+#app .report-cta button{width:auto;margin:0;padding:10px 16px;min-height:42px;flex:none}
+.report-box{margin-top:12px;padding:16px;border:1px solid #dbe4ea;border-radius:10px;background:#fff;text-align:left}
+.report-head{display:flex;justify-content:space-between;align-items:center}.report-head strong{font-size:15px;color:#173a53}
+.form-card p.report-intro,.form-card p.report-foot{font-size:12.5px;color:#5f7282;margin:4px 0 10px;line-height:1.5}
+.form-card p.report-foot{margin:8px 0 0;text-align:center}
+.report-fields{display:grid;gap:6px}
+.report-field{border:1px solid #e3eaef;border-radius:8px;padding:10px 12px}.report-field.active{border-color:var(--brand);background:#f8fcfc}
+#app label.report-check{display:flex;gap:10px;align-items:flex-start;margin:0;font-weight:600;font-size:13.5px;color:#183447;cursor:pointer}
+.report-check input{margin-top:3px;accent-color:var(--brand);width:16px;height:16px;flex:none}
+.report-check small{display:block;font-weight:400;color:#6b7e8c;font-size:12px;word-break:break-word}
+#app input.report-input{margin-top:8px;min-height:44px;padding:11px 12px;font-size:15px;background:#fff}
+#app label.report-label{margin:12px 0 6px;font-size:13px}
+#reportNote{width:100%;box-sizing:border-box;border:1px solid #cfdbe3;border-radius:8px;padding:10px;font:inherit;font-size:14px;resize:vertical}
+#app #reportCopy{display:flex;margin:6px auto 0}
+@media(max-width:440px){.report-cta{flex-direction:column;align-items:stretch}#app .report-cta button{width:100%}}
+
 .completion-checklist .ic{width:15px;height:15px;color:#16634e;stroke-width:2.4;vertical-align:-3px}.completion-checklist .dot{display:inline-block;width:11px;height:11px;border:1.5px solid #a9b8c3;border-radius:50%;vertical-align:-1px;margin:0 2px}
 .ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .lead-sm{margin:-4px 0 14px;font-size:13px!important}
@@ -217,7 +235,7 @@ function draw() {
       .map(([k, v]) => `<div class="row"><span>${esc(k)}</span><span>${esc(v)}</span></div>`)
       .join(
         '',
-      )}<div class="hint">Si algún dato es incorrecto, no continúes y comunícate con tu plantel.</div><button id="correcto">Mis datos son correctos →</button>`;
+      )}<div class="hint">¿Algún dato no es correcto? Continúa con tu fotografía; al terminar podrás reportarlo para que lo corrijan.</div><button id="correcto">Continuar →</button>`;
     document.getElementById('correcto').onclick = () => {
       stage = 2;
       draw();
@@ -258,7 +276,8 @@ function draw() {
   app.innerHTML =
     '<div class="done-icon">' +
     ic('check') +
-    '</div><h1>¡Fotografía recibida!</h1><p>Recibimos tu fotografía correctamente. La revisaremos antes de sincronizarla con los sistemas de acceso al plantel.</p><div class="hint ok"><b>Estado:</b> Fotografía recibida · Pendiente de validación</div><p class="muted">No significa todavía que el acceso biométrico esté habilitado.</p>';
+    '</div><h1>¡Fotografía recibida!</h1><p>Recibimos tu fotografía correctamente. La revisaremos antes de sincronizarla con los sistemas de acceso al plantel.</p><div class="hint ok"><b>Estado:</b> Fotografía recibida · Pendiente de validación</div><p class="muted">No significa todavía que el acceso biométrico esté habilitado.</p><div class="report-cta"><div><b>¿Algún dato de tu perfil está mal?</b><span>Repórtalo y lo corregimos. Tu fotografía ya quedó registrada.</span></div><button type="button" class="secondary-btn" id="reportOpen">Reportar un dato</button></div><div id="reportBox" class="report-box" hidden></div>';
+  document.getElementById('reportOpen').onclick = openReportForm;
 }
 async function loadStudent() {
   token = document.getElementById('token').value.trim().toLowerCase();
@@ -1237,6 +1256,143 @@ window.addEventListener('pagehide', stopCamera);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && cameraStream) closeCameraPanel();
 });
+// Corrección de datos: recompra abre ticket en Zendesk (correo a soporte), NI va al WhatsApp de su marca.
+const SUPPORT_EMAIL = 'soporte@lottuseducation.com';
+const WHATSAPP_NI = {
+  UTC: '5215638212439',
+  UTEG: '5213319792631',
+  ULA: '5215662832987',
+  UANE: '5218442329475',
+};
+const REPORT_FIELDS = [
+  ['nombre', 'Nombre'],
+  ['matricula', 'Matrícula'],
+  ['correo', 'Correo'],
+  ['plantel', 'Plantel'],
+  ['periodo', 'Periodo'],
+  ['otro', 'Otro dato'],
+];
+
+function studentEmail() {
+  return student?.correo || student?.email || student?.correo_institucional || student?.correo_personal || '';
+}
+function isRecompra() {
+  const kind = [student?.tipo_ingreso, student?.tipo_alumno, student?.tipo, student?.segmento]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return /recompra|reingreso|reinscrip/.test(kind);
+}
+function reportChannel() {
+  if (isRecompra()) return { type: 'email' };
+  const phone = WHATSAPP_NI[String(student?.marca || '').toUpperCase()];
+  return phone ? { type: 'whatsapp', phone } : { type: 'email' };
+}
+
+function buildReportMessage(changes, note) {
+  const marca = String(student?.marca || '').toUpperCase();
+  const lines = [
+    `Hola, soy ${student?.nombre || ''}, estudiante${isRecompra() ? '' : ' de Nuevo Ingreso'} de ${marca}.`,
+    'Ya completé mi registro fotográfico y necesito corregir datos de mi perfil.',
+    '',
+    `Matrícula: ${student?.matricula || ''}`,
+    `Nombre: ${student?.nombre || ''}`,
+    `Correo: ${studentEmail() || 'no registrado'}`,
+    `Plantel: ${student?.plantel || ''}`,
+    '',
+    'Datos a corregir:',
+    ...changes.map((c) => `- ${c.label}: aparece "${c.current || 'sin dato'}", el correcto es "${c.value}"`),
+  ];
+  if (note) lines.push('', `Comentario: ${note}`);
+  return lines.join('\n');
+}
+
+function openReportForm() {
+  const box = document.getElementById('reportBox');
+  if (!box) return;
+  const channel = reportChannel();
+  const current = { ...student, correo: studentEmail() };
+  box.hidden = false;
+  box.innerHTML = `<div class="report-head"><strong>¿Qué dato está mal?</strong><button type="button" class="link-btn" id="reportClose">Cerrar</button></div>
+<p class="report-intro">Marca lo que necesitas corregir y escribe el dato correcto.</p>
+<div class="report-fields">${REPORT_FIELDS.map(
+    ([key, label]) => `<div class="report-field" data-key="${key}">
+  <label class="report-check"><input type="checkbox" value="${key}"><span>${label}${
+    key !== 'otro' ? `<small>${esc(current[key] || 'sin dato')}</small>` : ''
+  }</span></label>
+  <input type="text" class="report-input" placeholder="${key === 'otro' ? 'Describe el dato y cómo debe quedar' : 'Escribe el dato correcto'}" hidden>
+</div>`,
+  ).join('')}</div>
+<label for="reportNote" class="report-label">Comentario (opcional)</label>
+<textarea id="reportNote" rows="2" maxlength="400"></textarea>
+<button type="button" id="reportSend" disabled>${
+    channel.type === 'whatsapp' ? 'Enviar por WhatsApp' : 'Enviar a soporte'
+  }</button>
+<button type="button" class="link-btn" id="reportCopy">Copiar mensaje</button>
+<p class="report-foot">${
+    channel.type === 'whatsapp'
+      ? `Se abrirá WhatsApp con tu información para el equipo de ${esc(String(student?.marca || '').toUpperCase())}.`
+      : `Se abrirá tu correo para generar un ticket en ${SUPPORT_EMAIL}.`
+  }</p>`;
+
+  const collect = () => {
+    const changes = [];
+    box.querySelectorAll('.report-field').forEach((row) => {
+      const check = row.querySelector('input[type=checkbox]');
+      const value = row.querySelector('.report-input').value.trim();
+      if (check.checked && value) {
+        const key = row.dataset.key;
+        const label = REPORT_FIELDS.find(([k]) => k === key)[1];
+        changes.push({ label, current: key === 'otro' ? '' : current[key], value });
+      }
+    });
+    return changes;
+  };
+  const refresh = () => {
+    box.querySelectorAll('.report-field').forEach((row) => {
+      const on = row.querySelector('input[type=checkbox]').checked;
+      const input = row.querySelector('.report-input');
+      input.hidden = !on;
+      row.classList.toggle('active', on);
+    });
+    document.getElementById('reportSend').disabled = collect().length === 0;
+  };
+  box.querySelectorAll('.report-field input').forEach((el) => el.addEventListener('input', refresh));
+  box.querySelectorAll('input[type=checkbox]').forEach((el) =>
+    el.addEventListener('change', (e) => {
+      refresh();
+      if (e.target.checked) e.target.closest('.report-field').querySelector('.report-input').focus();
+    }),
+  );
+  document.getElementById('reportClose').onclick = () => {
+    box.hidden = true;
+    box.innerHTML = '';
+  };
+  const message = () => buildReportMessage(collect(), document.getElementById('reportNote').value.trim());
+  document.getElementById('reportSend').onclick = () => {
+    const text = message();
+    if (channel.type === 'whatsapp') {
+      window.open(`https://wa.me/${channel.phone}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    } else {
+      const subject = `Corrección de datos de perfil - Matrícula ${student?.matricula || ''}`;
+      location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+    }
+    document.querySelector('.report-foot').textContent =
+      'Si no se abrió, usa «Copiar mensaje» y envíalo manualmente.';
+  };
+  document.getElementById('reportCopy').onclick = async () => {
+    const text = message();
+    const target = channel.type === 'whatsapp' ? `al WhatsApp +${channel.phone}` : `a ${SUPPORT_EMAIL}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      document.querySelector('.report-foot').textContent = `Mensaje copiado. Pégalo y envíalo ${target}.`;
+    } catch {
+      document.querySelector('.report-foot').textContent = `No se pudo copiar. Envía tus datos ${target}.`;
+    }
+  };
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 async function upload() {
   const notice = privacyForStudent();
   if (!notice) {
